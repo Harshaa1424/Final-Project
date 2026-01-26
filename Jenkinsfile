@@ -1,45 +1,60 @@
 pipeline {
-  agent any
-  environment {
-    DOCKERHUB_CRED = 'dockerhub-creds'   // Jenkins credential id (username/password)
-    DOCKERHUB_USER = 'harshaa1424'
-    DEV_REPO = 'finalproject-dev'
-    PROD_REPO = 'finalproject-prod'
-  }
-  stages {
-    stage('Checkout') {
-      steps {
-        checkout scm
-      }
+    agent any
+
+    environment {
+        DOCKERHUB_USERNAME = 'harshaa1424'
+        DEV_REPO  = 'myapp-dev'
+        PROD_REPO = 'myapp-prod'
+        IMAGE_TAG = "${BUILD_NUMBER}"
+        EC2_HOST  = '13.233.144.91'
+        EC2_USER  = 'ubuntu'
     }
-    stage('Build image') {
-      steps {
-        script {
-          def tag = env.BRANCH_NAME == 'master' ? "prod-${env.BUILD_NUMBER}" : "dev-${env.BUILD_NUMBER}"
-          env.IMAGE = "${DOCKERHUB_USER}/${(env.BRANCH_NAME == 'master') ? PROD_REPO : DEV_REPO}:${tag}"
-          sh "docker build -t ${env.IMAGE} ."
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
         }
-      }
-    }
-    stage('Login & Push') {
-      steps {
-        withCredentials([usernamePassword(credentialsId: env.DOCKERHUB_CRED, usernameVariable: 'DH_USER', passwordVariable: 'DH_PSW')]) {
-          sh 'echo "$DH_PSW" | docker login -u "$DH_USER" --password-stdin'
-          sh "docker push ${env.IMAGE}"
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'dev') {
+                        sh "docker build -t $DOCKERHUB_USERNAME/$DEV_REPO:$IMAGE_TAG ."
+                    } else if (env.BRANCH_NAME == 'main') {
+                        sh "docker build -t $DOCKERHUB_USERNAME/$PROD_REPO:$IMAGE_TAG ."
+                    }
+                }
+            }
         }
-      }
+
+        stage('Push to DockerHub') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'dev') {
+                        sh "docker push $DOCKERHUB_USERNAME/$DEV_REPO:$IMAGE_TAG"
+                    } else if (env.BRANCH_NAME == 'main') {
+                        sh "docker push $DOCKERHUB_USERNAME/$PROD_REPO:$IMAGE_TAG"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to EC2 (Master Only)') {
+            when {
+                branch 'main'
+            }
+            steps {
+                sh """
+                ssh -o StrictHostKeyChecking=no ubuntu@${EC2_HOST} '
+                  docker pull $DOCKERHUB_USERNAME/$PROD_REPO:$IMAGE_TAG &&
+                  docker stop myapp || true &&
+                  docker rm myapp || true &&
+                  docker run -d -p 80:80 --name myapp $DOCKERHUB_USERNAME/$PROD_REPO:$IMAGE_TAG
+                '
+                """
+            }
+        }
     }
-    stage('Deploy (if master)') {
-      when { branch 'master' }
-      steps {
-        // Example: trigger remote deploy via SSH (requires SSH setup on Jenkins)
-        // Replace with your remote deploy command or webhook to trigger deploy on server
-        echo "Deploy to production (you need to implement remote deploy step)"
-      }
-    }
-  }
-  post {
-    success { echo "Pipeline successful: ${env.IMAGE}" }
-    failure { echo "Pipeline failed" }
-  }
 }
