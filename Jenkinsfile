@@ -8,6 +8,10 @@ pipeline {
         IMAGE_TAG = "${BUILD_NUMBER}"
         EC2_HOST  = '13.233.144.91'
         EC2_USER  = 'ubuntu'
+
+      
+        DOCKERHUB_CRED = dckr_pat_8bALhmXmr0-I36Vz06oFRpatWmI
+        GITHUB_TOKEN   = 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
     }
 
     stages {
@@ -26,6 +30,14 @@ pipeline {
                         sh "docker build -t $DOCKERHUB_USERNAME/$PROD_REPO:$IMAGE_TAG ."
                     }
                 }
+            }
+        }
+
+        stage('Docker Login') {
+            steps {
+                sh """
+                echo "$DOCKERHUB_CRED" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+                """
             }
         }
 
