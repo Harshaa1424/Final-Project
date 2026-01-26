@@ -1,0 +1,7 @@
+version: "3.8"
+services:
+  web:
+    image: <DOCKERHUB_USERNAME>/<PROD_REPO>:<TAG_OR_SHA>
+    ports:
+      - "80:80"
+    restart: unless-stopped
