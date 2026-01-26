@@ -1,0 +1,45 @@
+pipeline {
+  agent any
+  environment {
+    DOCKERHUB_CRED = 'dockerhub-creds'   // Jenkins credential id (username/password)
+    DOCKERHUB_USER = 'harshaa1424'
+    DEV_REPO = 'finalproject-dev'
+    PROD_REPO = 'finalproject-prod'
+  }
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+    stage('Build image') {
+      steps {
+        script {
+          def tag = env.BRANCH_NAME == 'master' ? "prod-${env.BUILD_NUMBER}" : "dev-${env.BUILD_NUMBER}"
+          env.IMAGE = "${DOCKERHUB_USER}/${(env.BRANCH_NAME == 'master') ? PROD_REPO : DEV_REPO}:${tag}"
+          sh "docker build -t ${env.IMAGE} ."
+        }
+      }
+    }
+    stage('Login & Push') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: env.DOCKERHUB_CRED, usernameVariable: 'DH_USER', passwordVariable: 'DH_PSW')]) {
+          sh 'echo "$DH_PSW" | docker login -u "$DH_USER" --password-stdin'
+          sh "docker push ${env.IMAGE}"
+        }
+      }
+    }
+    stage('Deploy (if master)') {
+      when { branch 'master' }
+      steps {
+        // Example: trigger remote deploy via SSH (requires SSH setup on Jenkins)
+        // Replace with your remote deploy command or webhook to trigger deploy on server
+        echo "Deploy to production (you need to implement remote deploy step)"
+      }
+    }
+  }
+  post {
+    success { echo "Pipeline successful: ${env.IMAGE}" }
+    failure { echo "Pipeline failed" }
+  }
+}
